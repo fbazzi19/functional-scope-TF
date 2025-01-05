@@ -17,7 +17,13 @@ library(ggplot2)
 ## Data Sources
 ```{r}
 gene_func_cat <- read.csv("E_coli_data/annotations/cog-24_Ecoli.cog.csv", header = FALSE)
+gene_func_cat <-gene_func_cat[,c(1,7)]
 head(gene_func_cat)
+```
+```{r}
+cog_to_func_cat <- read.table("E_coli_data/annotations/cog-24.def.tab", sep = "\t")
+cog_to_func_cat <- cog_to_func_cat[,1:2]
+head(cog_to_func_cat)
 ```
 
 ## R Markdown
