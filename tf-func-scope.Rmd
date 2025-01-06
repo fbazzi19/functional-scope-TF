@@ -116,7 +116,47 @@ reg_net <- reg_net[!duplicated(reg_net),]
 reg_net_final <- list()
 i=1
 for (tf in names(which(table(reg_net$TF)>20))){
-  reg_net_final[[i]]<- list(TF=tf, Targets=reg_net[which(reg_net$TF==tf),1])
+  targets<-reg_net[which(reg_net$TF==tf),1]
+  func_cats <- list()
+  j=1
+  for (targ in targets){
+    func_cats[[j]] <- gene_func_cat[which(gene_func_cat$V1 == targ),3]
+    j=j+1
+  }
+  reg_net_final[[i]]<- list(TF=tf, Category=unlist(func_cats))
+  i=i+1
+}
+```
+
+```{r}
+#after getting the associated functional categories, some genes
+#did not have an available category, so I check once again that
+#each TF has >20 targets
+reg_net_final <- reg_net_final[unlist(lapply(reg_net_final, function(x) length(x$Category)>20))]
+
+```
+
+
+#Calculate Category Weights
+```{r}
+#raw weights
+raw_weights <- table(gene_func_cat$FunctionCategory)/length(gene_func_cat$FunctionCategory)
+#normalized
+weights <- raw_weights/sum(raw_weights)
+```
+
+#Calculate functional diversity
+```{r}
+entropies=list()
+i=1
+for (tf in reg_net_final){
+  entropy=0
+  for (cat in names(table(tf$Category))){
+    pi=table(tf$Category)[cat]/sum(table(tf$Category))
+    entropy=entropy+(weights[cat]*(pi*log(pi)))
+  }
+  entropy=entropy*-1
+  entropies[[i]]=list(TF=tf$TF, entropy=entropy)
   i=i+1
 }
 ```
