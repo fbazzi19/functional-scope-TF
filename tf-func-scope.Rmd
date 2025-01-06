@@ -9,8 +9,12 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+##Project Description
+TBD
+
 ## Libraries
 ```{r}
+library(tidyverse)
 library(ggplot2)
 ```
 
@@ -25,15 +29,96 @@ cog_to_func_cat <- read.table("E_coli_data/annotations/cog-24.def.tab", sep = "\
 cog_to_func_cat <- cog_to_func_cat[,1:2]
 head(cog_to_func_cat)
 ```
+```{r}
+reg_net <- read.table("network_tf_gene_Ecoli_GRN.txt", skip=37, sep="\t")
+reg_net <- reg_net[,c(2,4)]
+colnames(reg_net)<- c("TF", "Target")
+reg_net[,1]<-tolower(reg_net[,1])
+reg_net[,2] <- tolower(reg_net[,2])
+head(reg_net)
+```
+```{r}
+id_to_bid <- read_tsv("GeneProductSet.txt", skip=41, col_names = FALSE)
+id_to_bid <- id_to_bid[,2:3]
+colnames(id_to_bid) <- c("name","bnumber")
+id_to_bid$name <- tolower(id_to_bid$name)
+head(id_to_bid)
+```
+#Functional category preprocessing
+## Add Functional Categories to Genes
+```{r}
+# Rename columns for clarity
+colnames(cog_to_func_cat) <- c("COG", "FunctionCategory")
+colnames(gene_func_cat)[2] <- "COG"  # Assuming the 2nd column has the COG values
 
-## R Markdown
+# Merge by "COG" to map functional categories, preserving all rows in gene_func_cat
+gene_func_cat <- merge(gene_func_cat, cog_to_func_cat, by = "COG", all.x = TRUE)
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+#exclude genes with no associated functional category
+gene_func_cat <- na.omit(gene_func_cat)
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+# Display the first few rows
+head(gene_func_cat)
+```
 
-```{r cars}
-summary(cars)
+## Remove duplicate rows
+```{r}
+#duplicates are considered rows with the same gene and functional
+#category, not necessarily the same COGID
+gene_func_cat <- gene_func_cat[!duplicated(gene_func_cat[,2:3]),]
+#TODO: figure out how to deal with the remaining duplicate genes
+```
+
+#Regulatory Network Preprocessing
+##Switch to bnumbers
+```{r}
+# Temporarily rename column
+colnames(reg_net)[2] <- "name"
+
+# Merge by "ID"
+reg_net <- merge(reg_net, id_to_bid, by = "name", all.x = TRUE)
+
+#exclude genes with no associated bnumber
+reg_net <- na.omit(reg_net)
+
+#drop the old ids and rename appropriately
+reg_net <- reg_net[,2:3]
+colnames(reg_net)[2] <- "Target"
+
+head(reg_net)
+```
+
+```{r}
+#repeat for the TFs
+# Temporarily rename column
+colnames(reg_net)[1] <- "name"
+
+# Merge by "ID"
+reg_net <- merge(reg_net, id_to_bid, by = "name", all.x = TRUE)
+
+#exclude genes with no associated bnumber
+reg_net <- na.omit(reg_net)
+
+#drop the old ids and rename appropriately
+reg_net <- reg_net[,2:3]
+colnames(reg_net)[2] <- "TF"
+
+# Display the first few rows
+head(reg_net)
+```
+##Remove Duplicates
+```{r}
+reg_net <- reg_net[!duplicated(reg_net),]
+```
+
+##Reformat the network table and keep only TFs with >20 targets
+```{r}
+reg_net_final <- list()
+i=1
+for (tf in names(which(table(reg_net$TF)>20))){
+  reg_net_final[[i]]<- list(TF=tf, Targets=reg_net[which(reg_net$TF==tf),1])
+  i=i+1
+}
 ```
 
 ## Including Plots
