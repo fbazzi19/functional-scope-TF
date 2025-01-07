@@ -10,25 +10,30 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ##Project Description
-TBD
+In this project, I analyzed the variability of functional categories of the targets of transcription factors.
 
-## Libraries
+# Libraries
 ```{r}
 library(tidyverse)
+library(dplyr)
 library(ggplot2)
+library(tidyr)
 ```
 
-## Data Sources
+# Data Sources
+Here I load in the genes and their associated COGS
 ```{r}
 gene_func_cat <- read.csv("E_coli_data/annotations/cog-24_Ecoli.cog.csv", header = FALSE)
 gene_func_cat <-gene_func_cat[,c(1,7)]
 head(gene_func_cat)
 ```
+Here I load in a table mapping each COG to a functional category
 ```{r}
 cog_to_func_cat <- read.table("E_coli_data/annotations/cog-24.def.tab", sep = "\t")
 cog_to_func_cat <- cog_to_func_cat[,1:2]
 head(cog_to_func_cat)
 ```
+Here I load in data linking transcription factors to their targets.
 ```{r}
 reg_net <- read.table("network_tf_gene_Ecoli_GRN.txt", skip=37, sep="\t")
 reg_net <- reg_net[,c(2,4)]
@@ -37,6 +42,7 @@ reg_net[,1]<-tolower(reg_net[,1])
 reg_net[,2] <- tolower(reg_net[,2])
 head(reg_net)
 ```
+Here I load in data mapping gene names to bnumbers
 ```{r}
 id_to_bid <- read_tsv("GeneProductSet.txt", skip=41, col_names = FALSE)
 id_to_bid <- id_to_bid[,2:3]
@@ -46,9 +52,10 @@ head(id_to_bid)
 ```
 #Functional category preprocessing
 ## Add Functional Categories to Genes
+Using the COGs, I associate each gene with a functional category. Those without an association are ommitted.
 ```{r}
 # Rename columns for clarity
-colnames(cog_to_func_cat) <- c("COG", "FunctionCategory")
+colnames(cog_to_func_cat) <- c("COG", "funccat")
 colnames(gene_func_cat)[2] <- "COG"  # Assuming the 2nd column has the COG values
 
 # Merge by "COG" to map functional categories, preserving all rows in gene_func_cat
@@ -62,15 +69,14 @@ head(gene_func_cat)
 ```
 
 ## Remove duplicate rows
+Some genes are listed more than once, so I remove duplicates. Duplicates are considered rows with the same gene and functional category, not necessarily the same COG.
 ```{r}
-#duplicates are considered rows with the same gene and functional
-#category, not necessarily the same COGID
 gene_func_cat <- gene_func_cat[!duplicated(gene_func_cat[,2:3]),]
-#TODO: figure out how to deal with the remaining duplicate genes
 ```
 
 #Regulatory Network Preprocessing
 ##Switch to bnumbers
+Here I change the target gene names to their associated bnumbers
 ```{r}
 # Temporarily rename column
 colnames(reg_net)[2] <- "name"
@@ -87,7 +93,7 @@ colnames(reg_net)[2] <- "Target"
 
 head(reg_net)
 ```
-
+Here I change the transcription factor gene names to their associated bnumbers
 ```{r}
 #repeat for the TFs
 # Temporarily rename column
@@ -107,11 +113,13 @@ colnames(reg_net)[2] <- "TF"
 head(reg_net)
 ```
 ##Remove Duplicates
+Remove rows with the same target and transcription factor.
 ```{r}
 reg_net <- reg_net[!duplicated(reg_net),]
 ```
 
 ##Reformat the network table and keep only TFs with >20 targets
+I look at transcription factors with a larger number of targets to ensure robust diversity calculations.
 ```{r}
 reg_net_final <- list()
 i=1
@@ -127,25 +135,25 @@ for (tf in names(which(table(reg_net$TF)>20))){
   i=i+1
 }
 ```
+The result is a list of functional categories of the targets for each transcription factor.
 
+After getting the associated functional categories, some genes did not have an associated category, so I check once again that each transcription factor has more than 20 targets.
 ```{r}
-#after getting the associated functional categories, some genes
-#did not have an available category, so I check once again that
-#each TF has >20 targets
 reg_net_final <- reg_net_final[unlist(lapply(reg_net_final, function(x) length(x$Category)>20))]
-
 ```
 
 
 #Calculate Category Weights
+I weight the functional categories in order to incorporate the overall frequency of each category in the genome to adjust for biases in the dataset.
 ```{r}
 #raw weights
-raw_weights <- table(gene_func_cat$FunctionCategory)/length(gene_func_cat$FunctionCategory)
+raw_weights <- table(gene_func_cat$funccat)/length(gene_func_cat$funccat)
 #normalized
 weights <- raw_weights/sum(raw_weights)
 ```
 
 #Calculate functional diversity
+I use entropy to measure how spread out the functional categories are within a transcription factor's target set.
 ```{r}
 entropies=list()
 i=1
@@ -156,17 +164,149 @@ for (tf in reg_net_final){
     entropy=entropy+(weights[cat]*(pi*log(pi)))
   }
   entropy=entropy*-1
-  entropies[[i]]=list(TF=tf$TF, entropy=entropy)
+  entropies[[i]]=list(TF=tf$TF, entropy=unname(entropy))
   i=i+1
 }
 ```
 
-## Including Plots
+#Results Analysis and Visualization
+First, I use a bar plot to show the functional category distributions for individual transcription factors. It can be seen that some transcription factors have much more targets belonging to certain functional categories than others.
+```{r}
+#flatten list into dataframe
+reg_net_df <- do.call(rbind, lapply(reg_net_final, function(x) {
+  data.frame(
+    TranscriptionFactor = x[[1]],
+    FunctionalCategory = x[[2]]
+  )
+}))
 
-You can also embed plots, for example:
+# Count occurrences of each functional category for each transcription factor
+long_form_df <- reg_net_df %>%
+  group_by(TranscriptionFactor, FunctionalCategory) %>%
+  summarise(Count = n(), .groups = "drop")
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+# Create a bar plot
+ggplot(long_form_df, aes(x = FunctionalCategory, y = Count, fill = TranscriptionFactor)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Functional Category Distribution by Transcription Factor",
+    x = "Functional Category",
+    y = "Number of Targets"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+Next, I plot entropy values for all transcription factors in an attempt to highlight trends or outliers. However, the graph shows that there are no outliers in the calculated entropy values.
+```{r}
+#flatten list into dataframe
+entropies_df <- do.call(rbind, lapply(entropies, function(x) {
+  data.frame(
+    TranscriptionFactor = x[[1]],
+    Entropy = x[[2]]
+  )
+}))
+
+mean_entropy <- mean(entropies_df$Entropy)
+sd_entropy <- sd(entropies_df$Entropy)
+threshold <- mean_entropy + 2 * sd_entropy
+
+# Add a column to classify outliers
+entropies_df <- entropies_df %>%
+  mutate(IsOutlier = ifelse(Entropy > threshold, "Outlier", "Normal"))
+
+# Plot with highlighted outliers
+ggplot(entropies_df, aes(x = TranscriptionFactor, y = Entropy)) +
+  geom_point(aes(color = IsOutlier), size = 3) +
+  geom_line(group = 1, color = "darkblue", linetype = "dashed") +
+  scale_color_manual(values = c("Normal" = "blue", "Outlier" = "red")) +
+  theme_minimal() +
+  labs(
+    title = "Entropy Values for Transcription Factors (Outliers Highlighted)",
+    x = "Transcription Factor",
+    y = "Entropy"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+I use a heatmap to visualize category distributions for targets of each transcription factor.
+```{r}
+# Heatmap plot
+ggplot(long_form_df, aes(x = TranscriptionFactor, y = FunctionalCategory, fill = Count)) +
+  geom_tile(color = "white") + 
+  scale_fill_gradient(low = "white", high = "blue") +
+  labs(
+    title = "Category Distributions for Transcription Factor Targets",
+    x = "Transcription Factor",
+    y = "Functional Category",
+    fill = "Target Count"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+This bar chart shows the relative contributions of categories to entropy, showing how some categories contribute more to specific transcription factors than others.
+```{r}
+# Calculate proportions and entropy contributions
+entropy_contributions <- long_form_df %>%
+  group_by(TranscriptionFactor) %>%
+  mutate(
+    Total = sum(Count),
+    Proportion = Count / Total,
+    EntropyContribution = -Proportion * log(Proportion)
+  ) %>%
+  ungroup()
+
+# Stacked bar chart for entropy contributions
+ggplot(entropy_contributions, aes(x = TranscriptionFactor, y = EntropyContribution, fill = FunctionalCategory)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(
+    title = "Category Contributions to Entropy for Each Transcription Factor",
+    x = "Transcription Factor",
+    y = "Entropy Contribution",
+    fill = "Functional Category"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+I produced a histogram of the entropy values as an attempt to reveal whether the distribution is skewed or uniform.
+```{r}
+# Histogram of entropy values
+ggplot(entropies_df, aes(x = Entropy)) +
+  geom_histogram(binwidth = 0.01, fill = "blue", color = "black", alpha = 0.7) +
+  labs(
+    title = "Distribution of Entropy Values",
+    x = "Entropy",
+    y = "Frequency"
+  ) +
+  theme_minimal()
+```
+
+Finally, I produced a scatterplot of entropy versus the number of targets to help visualize whether transcription factors with more targets exhibit higher entropy. The plot implies that a larger number of targets is associated with a higher entropy, but the association is not strong.
+```{r}
+# Reshape to wide form using dcast() or pivot_wider
+category_counts_wide <- long_form_df %>%
+  pivot_wider(names_from = FunctionalCategory, values_from = Count, values_fill = list(Count = 0))
+
+# Merge the dataframes based on TranscriptionFactor
+combined_df <- merge(entropies_df, category_counts_wide, by = "TranscriptionFactor")
+
+# Calculate the total number of targets for each transcription factor
+combined_df$NumTargets <- rowSums(combined_df[ , 4:56])  # Summing all category counts
+
+# Scatterplot of Entropy vs. Number of Targets
+ggplot(combined_df, aes(x = NumTargets, y = Entropy)) +
+  geom_point(size = 3, color = "blue") +
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  labs(
+    title = "Entropy vs. Number of Targets",
+    x = "Number of Targets",
+    y = "Entropy"
+  ) +
+  theme_minimal()
+```
+
+#Conclusions
+After using entropy calculations to assess how variable the functional categories of targets of transcription factors are, I found that while none of the entropy values hit an extreme, the values overall displayed low variability of the functional categories of the targets. This may imply that the transcription factors are relatively specialized, and many of their targets share a similar function. One limitation of that data to be considered is that after limiting the analysis to transcription factors with more than 20 targets, there were only 16 transcription factors. With a larger list or a more lenient constraint, I may have been able to observe greater variability in the overall range of entropies across transcription factors.
