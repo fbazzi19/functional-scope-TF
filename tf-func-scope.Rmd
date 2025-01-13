@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-##Project Description
+# Project Description
 In this project, I analyzed the variability of functional categories of the targets of transcription factors.
 
 # Libraries
@@ -50,7 +50,7 @@ colnames(id_to_bid) <- c("name","bnumber")
 id_to_bid$name <- tolower(id_to_bid$name)
 head(id_to_bid)
 ```
-#Functional category preprocessing
+# Functional category preprocessing
 ## Add Functional Categories to Genes
 Using the COGs, I associate each gene with a functional category. Those without an association are ommitted.
 ```{r}
@@ -74,8 +74,8 @@ Some genes are listed more than once, so I remove duplicates. Duplicates are con
 gene_func_cat <- gene_func_cat[!duplicated(gene_func_cat[,2:3]),]
 ```
 
-#Regulatory Network Preprocessing
-##Switch to bnumbers
+# Regulatory Network Preprocessing
+## Switch to bnumbers
 Here I change the target gene names to their associated bnumbers
 ```{r}
 # Temporarily rename column
@@ -112,13 +112,13 @@ colnames(reg_net)[2] <- "TF"
 # Display the first few rows
 head(reg_net)
 ```
-##Remove Duplicates
+## Remove Duplicates
 Remove rows with the same target and transcription factor.
 ```{r}
 reg_net <- reg_net[!duplicated(reg_net),]
 ```
 
-##Reformat the network table and keep only TFs with >20 targets
+## Reformat the network table and keep only TFs with >20 targets
 I look at transcription factors with a larger number of targets to ensure robust diversity calculations.
 ```{r}
 reg_net_final <- list()
@@ -143,7 +143,7 @@ reg_net_final <- reg_net_final[unlist(lapply(reg_net_final, function(x) length(x
 ```
 
 
-#Calculate Category Weights
+# Calculate Category Weights
 I weight the functional categories in order to incorporate the overall frequency of each category in the genome to adjust for biases in the dataset.
 ```{r}
 #raw weights
@@ -152,7 +152,7 @@ raw_weights <- table(gene_func_cat$funccat)/length(gene_func_cat$funccat)
 weights <- raw_weights/sum(raw_weights)
 ```
 
-#Calculate functional diversity
+# Calculate functional diversity
 I use entropy to measure how spread out the functional categories are within a transcription factor's target set.
 ```{r}
 entropies=list()
@@ -169,7 +169,7 @@ for (tf in reg_net_final){
 }
 ```
 
-#Results Analysis and Visualization
+# Results Analysis and Visualization
 First, I use a bar plot to show the functional category distributions for individual transcription factors. It can be seen that some transcription factors have much more targets belonging to certain functional categories than others.
 ```{r}
 #flatten list into dataframe
@@ -308,5 +308,5 @@ ggplot(combined_df, aes(x = NumTargets, y = Entropy)) +
   theme_minimal()
 ```
 
-#Conclusions
+# Conclusions
 After using entropy calculations to assess how variable the functional categories of targets of transcription factors are, I found that while none of the entropy values hit an extreme, the values overall displayed low variability of the functional categories of the targets. This may imply that the transcription factors are relatively specialized, and many of their targets share a similar function. One limitation of that data to be considered is that after limiting the analysis to transcription factors with more than 20 targets, there were only 16 transcription factors. With a larger list or a more lenient constraint, I may have been able to observe greater variability in the overall range of entropies across transcription factors.
